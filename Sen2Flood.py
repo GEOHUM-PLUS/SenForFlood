@@ -9,12 +9,12 @@ import numpy as np
 import torchvision.transforms.functional
 warnings.filterwarnings("ignore")
 
-class Sen2FloodLoader(torch.utils.data.Dataset):
+class Sen2Flood(torch.utils.data.Dataset):
     def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, countries:list[str]=None,
                  data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask', 'terrain', 'LULC'],
                  use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
         '''
-        Dataset loader for Sen2Flood.
+        Dataset reader for Sen2Flood.
 
         Parameters
         ---
