@@ -204,4 +204,4 @@ def predict_on_image(image_path:str):
 
 if __name__=='__main__':
     # train()
-    predict_on_image('/home/bruno/dataset_Sen2Flood/models/Images/mosaic_Bangladesh.tif')
+    predict_on_image('/home/bruno/dataset_Sen2Flood/models/Images/bangladesh_mosaic.tif')
