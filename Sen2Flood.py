@@ -113,16 +113,7 @@ class Sen2FloodLoader(torch.utils.data.Dataset):
                 
             # scales data between 0 and 1
             if self.scale_0_1:
-                # follows scales only if needed
-                if dti in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain']:
-                    for i in range(data.shape[0]):
-                        data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[dti][i][str(int(self.percentile_bttm))])/(self.STRETCH_LIMITS[dti][i][str(int(self.percentile_top))]-self.STRETCH_LIMITS[dti][i][str(int(self.percentile_bttm))])
-                else:
-                    for i in range(data.shape[0]):
-                        data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[dti][i]['0'])/(self.STRETCH_LIMITS[dti][i]['100']-self.STRETCH_LIMITS[dti][i]['0'])
-                
-                # clipping to 0 1
-                data = np.clip(data, a_min=0, a_max=1)
+                data = self.scale_data(dti, data)
 
             # store to return later with others
             result.append(data)
@@ -144,4 +135,18 @@ class Sen2FloodLoader(torch.utils.data.Dataset):
             data = torchvision.transforms.functional.vflip(data)
         if rotation!=0:
             data = torchvision.transforms.functional.rotate(data, rotation)
+        return data
+    
+    def scale_data(self, data_type, data):
+        # follows scales only if needed
+        if data_type in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain']:
+            for i in range(data.shape[0]):
+                data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_bttm))])/(self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_top))]-self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_bttm))])
+        else:
+            for i in range(data.shape[0]):
+                data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[data_type][i]['0'])/(self.STRETCH_LIMITS[data_type][i]['100']-self.STRETCH_LIMITS[data_type][i]['0'])
+        
+        # clipping to 0 1
+        data = np.clip(data, a_min=0, a_max=1)
+
         return data
