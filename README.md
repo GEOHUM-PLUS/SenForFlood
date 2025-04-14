@@ -11,4 +11,4 @@ Authors: [geohum.eu](geohum.eu)
 
 ## Access
 
-The dataset can be found and downloaded from [https://huggingface.co/datasets/menimato/SenForFlood](https://huggingface.co/datasets/menimato/SenForFlood).
+The dataset can be found and downloaded from [https://huggingface.co/datasets/matosak/SenForFlood](https://huggingface.co/datasets/matosak/SenForFlood).
