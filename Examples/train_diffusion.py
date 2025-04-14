@@ -5,7 +5,7 @@ sys.path.insert(2, 'FloodChangeDataset')
 import torch
 from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import argparse
-from Sen2Flood import Sen2FloodLoader
+from Sen2Flood import SenForFlood
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 print('Device:', DEVICE)
@@ -27,11 +27,11 @@ def train():
     diffusion = diffusion.to(DEVICE)
 
     # dataset
-    dataset = Sen2FloodLoader(dataset_folder='/media/bruno/Matosak/Sen2Flood', chip_size=256,
-                              data_to_include=['s1_during_flood'],
-                              percentile_scale_bttm=5, percentile_scale_top=95,
-                              countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
-                              use_data_augmentation=True)
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
+                          data_to_include=['s1_during_flood'],
+                          percentile_scale_bttm=5, percentile_scale_top=95,
+                          countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
+                          use_data_augmentation=True)
     dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=32, drop_last=True)
 
     for ind, (s1bf) in enumerate(dataloader):

@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 sys.path.insert(1, str(Path(__file__).parent.parent))
 
-from Sen2Flood import Sen2Flood
+from SenForFlood import SenForFlood
 from plots import plot_curves
 from unet import UNet
 import torch
@@ -16,7 +16,7 @@ print('Device:', DEVICE)
 
 def train():
     model = UNet(in_channels=5, out_channels=2, dropout_val=0.2).to(DEVICE)
-    dataset = Sen2Flood(dataset_folder='/media/bruno/Matosak/Sen2Flood', chip_size=256,
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
                         data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
@@ -31,7 +31,7 @@ def train():
                    'Accuracy': {'train': [], 'eval': []},
                    }
     
-    save_model_path = '/home/bruno/dataset_Sen2Flood/models/UNet_SouthAsia.pt'
+    save_model_path = '/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia.pt'
 
     def model_train(input_train, output_train):
         model.train()
@@ -87,7 +87,7 @@ def train():
             if step%10==0:
                 plot_curves(training_curves, [i for i in range(step)], 
                             smoothed=True,
-                            save_path='/home/bruno/dataset_Sen2Flood/models/curves_UNet_SouthAsia.png',
+                            save_path='/home/bruno/dataset_SenForFlood/models/curves_UNet_SouthAsia.png',
                             show=False,
                             title=f'Epochs: {epoch}')
             
@@ -98,7 +98,7 @@ def train():
             print(f"Best model ever stored (acc. {best_acc:.4f}).")
 
 def predic_on_dataset():
-    model_path = '/home/bruno/dataset_Sen2Flood/models/UNet_SouthAsia.pt'
+    model_path = '/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia.pt'
     model = UNet(in_channels=5, out_channels=2, dropout_val=0.2)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model = model.to(DEVICE)
@@ -108,7 +108,7 @@ def predic_on_dataset():
     batch_size = 64+32
     train_size = 64
 
-    dataset = Sen2Flood(dataset_folder='/media/bruno/Matosak/Sen2Flood', chip_size=256,
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
                         data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
@@ -134,21 +134,21 @@ def predic_on_dataset():
             for k in range(4):
                 ax[k].axis('off')
             plt.tight_layout()
-            plt.savefig(f'/home/bruno/dataset_Sen2Flood/models/{ind:03d}-{i:02d}.png')
+            plt.savefig(f'/home/bruno/dataset_SenForFlood/models/{ind:03d}-{i:02d}.png')
             plt.close()
 
 def predict_on_image(image_path:str):
     import rasterio as r
 
     # load model
-    model_path = '/home/bruno/dataset_Sen2Flood/models/UNet_SouthAsia.pt'
+    model_path = '/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia.pt'
     model = UNet(in_channels=5, out_channels=2, dropout_val=0.2)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model = model.to(DEVICE)
     model.eval()
 
-    # load Sen2Flood for getting scalling function
-    dataset = Sen2Flood(dataset_folder='/media/bruno/Matosak/Sen2Flood', chip_size=256,
+    # load SenForFlood for getting scalling function
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
                         data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
@@ -199,9 +199,9 @@ def predict_on_image(image_path:str):
             count=1,
             compress='lzw')
 
-        with r.open('/home/bruno/dataset_Sen2Flood/models/UNet_SouthAsia_Prediction_Bangladesh.tif', 'w', **profile) as dst:
+        with r.open('/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia_Prediction_Bangladesh.tif', 'w', **profile) as dst:
             dst.write(result.astype(r.uint8), 1)
 
 if __name__=='__main__':
     # train()
-    predict_on_image('/home/bruno/dataset_Sen2Flood/models/Images/bangladesh_mosaic.tif')
+    predict_on_image('/home/bruno/dataset_SenForFlood/models/Images/bangladesh_mosaic.tif')
