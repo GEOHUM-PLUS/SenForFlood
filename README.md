@@ -6,7 +6,7 @@ Paper: [coming up]
 
 DOI: [coming up]
 
-Authors: [geohum.eu](geohum.eu)
+Authors: [GEOHUM](https://geohum.eu)
 
 ## Access
 
