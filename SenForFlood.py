@@ -9,7 +9,7 @@ import numpy as np
 import torchvision.transforms.functional
 warnings.filterwarnings("ignore")
 
-class Sen2Flood(torch.utils.data.Dataset):
+class SenForFlood(torch.utils.data.Dataset):
     def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, countries:list[str]=None,
                  data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask', 'terrain', 'LULC'],
                  use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
@@ -19,7 +19,8 @@ class Sen2Flood(torch.utils.data.Dataset):
         Parameters
         ---
         dataset_folder: str
-            Path to folder cotnaining the dataset.
+            Path to folder containing the dataset. The folder that contains CEMS
+            and DFO folders.
         source: str (default 'DFO')
             source from which to get samples. Either DFO or CEMS.
         shuffle_seed: int (default 0)
@@ -66,13 +67,13 @@ class Sen2Flood(torch.utils.data.Dataset):
         self.percentile_bttm = percentile_scale_bttm
         if source == 'DFO':
             if countries is None:
-                self.samples_ids = glob.glob(os.path.join(dataset_folder, 'Data/DFO/*/DFO_*_*/flood_mask/*_flood_mask.tif'))
+                self.samples_ids = glob.glob(os.path.join(dataset_folder, 'DFO/*/DFO_*_*/flood_mask/*_flood_mask.tif'))
             else:
                 self.samples_ids = []
                 for country in countries:
-                    self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'Data/DFO/{country}/DFO_*_*/flood_mask/*_flood_mask.tif')))
+                    self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/DFO_*_*/flood_mask/*_flood_mask.tif')))
         elif source == 'CEMS':
-            self.samples_ids = glob.glob(os.path.join(dataset_folder, f'Data/CEMS/*/flood_mask/*_flood_mask.tif'))
+            self.samples_ids = glob.glob(os.path.join(dataset_folder, f'CEMS/*/flood_mask/*_flood_mask.tif'))
         else:
             raise ValueError(f'{source} not valid as source. DFO or CEMS.')
         self.samples_ids.sort()
