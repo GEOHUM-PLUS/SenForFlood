@@ -4,11 +4,15 @@ A global multi-modeal dataset for flood mapping with images before and during fl
 
 Paper: [coming up]
 
+DOI: [coming up]
+
 Authors: [geohum.eu](geohum.eu)
 
 ## Access
 
-The dataset can be accessed from [https://huggingface.co/datasets/matosak/SenForFlood](https://huggingface.co/datasets/matosak/SenForFlood).
+The dataset can be accessed through the following platforms:
+ - [Huggingface](https://huggingface.co/datasets/matosak/SenForFlood) (upload in progress)
+ - [Harvard Dataverse]() (upload in progress)
 
 ## Abstract
 
