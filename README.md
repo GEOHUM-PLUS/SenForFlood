@@ -11,8 +11,17 @@ Authors: [GEOHUM](https://geohum.eu)
 ## Access
 
 The dataset can be accessed through the following platforms:
- - [Harvard Dataverse](https://doi.org/10.7910/DVN/ZQCODX)
+  - [Harvard Dataverse](https://doi.org/10.7910/DVN/ZQCODX)
   - [Huggingface](https://huggingface.co/datasets/matosak/SenForFlood) (upload in progress)
+
+### Download instructions
+
+For using the Harvard Dataverse platform for downloading, one option is to use `aria2`, `curl`, and `jq` as indicated in the following command.
+
+```
+aria2c --input-file <(curl "https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi%3A10.7910/DVN/ZQCODX" | jq -r .distribution[].contentUrl)
+```
+
 
 ## Abstract
 
