@@ -14,7 +14,7 @@ The dataset can be accessed through the following platforms:
   - [Harvard Dataverse](https://doi.org/10.7910/DVN/ZQCODX)
   - [Huggingface](https://huggingface.co/datasets/matosak/SenForFlood) (upload in progress)
 
-### Download instructions
+### Bulk Download
 
 For using the Harvard Dataverse platform for downloading, one option is to use `aria2`, `curl`, and `jq` as indicated in the following command.
 
