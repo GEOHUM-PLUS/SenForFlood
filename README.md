@@ -19,7 +19,7 @@ The dataset can be accessed through the following platforms:
 For using the Harvard Dataverse platform for downloading, one option is to use `aria2`, `curl`, and `jq` as indicated in the following command.
 
 ```
-aria2c --input-file <(curl "https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi%3A10.7910/DVN/ZQCODX" | jq -r .distribution[].contentUrl)
+aria2c --input-file <(curl "https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi%3A10.7910/DVN/ZQCODX" | jq -r ".distribution[].contentUrl")
 ```
 
 > [!WARNING]  
