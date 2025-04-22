@@ -22,8 +22,8 @@ For using the Harvard Dataverse platform for downloading, one option is to use `
 aria2c --input-file <(curl "https://dataverse.harvard.edu/api/datasets/export?exporter=schema.org&persistentId=doi%3A10.7910/DVN/ZQCODX" | jq -r .distribution[].contentUrl)
 ```
 
-> [!NOTE]  
-> Be aware that the total download size is approximately 254 GB.
+> [!WARNING]  
+> Make sure to have enough free space on your storage to save the dataset. The total download size is approximately 254 GB.
 
 ## Abstract
 
