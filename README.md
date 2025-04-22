@@ -11,8 +11,8 @@ Authors: [GEOHUM](https://geohum.eu)
 ## Access
 
 The dataset can be accessed through the following platforms:
- - [Huggingface](https://huggingface.co/datasets/matosak/SenForFlood) (upload in progress)
- - [Harvard Dataverse]() (upload in progress)
+ - [Harvard Dataverse](https://doi.org/10.7910/DVN/ZQCODX)
+  - [Huggingface](https://huggingface.co/datasets/matosak/SenForFlood) (upload in progress)
 
 ## Abstract
 
