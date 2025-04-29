@@ -14,7 +14,7 @@ class SenForFlood(torch.utils.data.Dataset):
                  data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask', 'terrain', 'LULC'],
                  use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
         '''
-        Dataset reader for Sen2Flood.
+        Dataset reader for SenForFlood.
 
         Parameters
         ---
