@@ -2,11 +2,11 @@
 
 A global multi-modeal dataset for flood mapping with images before and during flood.
 
-Paper: [coming up]
+Paper: [SenForFlood: A New Global Dataset for Flooded Area Detection](https://isprs-archives.copernicus.org/articles/XLVIII-M-7-2025/97/2025/)
 
-DOI: [coming up]
+DOI: [10.5194/isprs-archives-XLVIII-M-7-2025-97-2025](https://doi.org/10.5194/isprs-archives-XLVIII-M-7-2025-97-2025)
 
-Authors: [GEOHUM](https://geohum.eu)
+Lab: [GEOHUM](https://geohum.eu)
 
 ## Access
 
@@ -39,4 +39,4 @@ tar -xvf SenForFloods-001.tar.gz
 
 A total of 353 flood events around the globe were included in the dataset, separated into DFO and CEMS. The samples from DFO possess flood masks created using an automatic change detection algorithm, while samples in CEMS have high-quality, analyst created flood masks from previous emercency activations.
 
-![Dataset Sample Density](Images/DensityPlot.png)
+![Dataset Sample Count by Region](Images/MapSampleCount.png)
