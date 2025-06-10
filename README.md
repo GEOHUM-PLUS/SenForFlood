@@ -39,4 +39,4 @@ tar -xvf SenForFloods-001.tar.gz
 
 A total of 353 flood events around the globe were included in the dataset, separated into DFO and CEMS. The samples from DFO possess flood masks created using an automatic change detection algorithm, while samples in CEMS have high-quality, analyst created flood masks from previous emercency activations.
 
-![Dataset Sample Count by Region](Images/MapSampleCount.png)
+![Dataset Sample Count by Region](Images/MapSampleCount_hex.png)
