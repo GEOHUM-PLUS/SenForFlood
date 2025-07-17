@@ -204,6 +204,95 @@ def predict_on_image(image_path:str, output_path:str):
         with r.open(output_path, 'w', **profile) as dst:
             dst.write(result.astype(r.uint8), 1)
 
+def predict_on_image_bayesian_dropout(input_path:str, output_path:str, n_iterations:int=10):
+    import rasterio as r
+
+    # load model
+    model_path = '/home/bruno/Documents/dataset_Sen2Flood/models/UNet_SouthAsia.pt'
+    model = UNet(in_channels=5, out_channels=2, dropout_val=0.2)
+    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model = model.to(DEVICE)
+    model.eval()
+    for m in model.modules():
+        if m.__class__.__name__.startswith('Dropout'):
+            m.train()
+
+    # load SenForFlood for getting scalling function
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood/SenForFlood', chip_size=256,
+                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
+                        percentile_scale_bttm=5, percentile_scale_top=95,
+                        countries=['Bangladesh', 'India', 'Pakistan', 'Sri_Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
+                        use_data_augmentation=True)
+    
+    input_dataset = r.open(input_path)
+    result_class = numpy.zeros([input_dataset.height, input_dataset.width], dtype=numpy.uint8)+255
+    result_eu = numpy.zeros([input_dataset.height, input_dataset.width], dtype=numpy.float32)-1
+
+    # DO THE PREDICTION
+    # collect batches with each sample coordinates
+    batch_size = 64
+    batches = []
+    batch = []
+    for i in range(0,input_dataset.height-256,256-94-94):
+        for j in range(0,input_dataset.width-256,256-94-94):
+            batch.append([i,j])
+            if len(batch)==batch_size:
+                batches.append(batch)
+                batch = []
+    if len(batch)>0:
+        batches.append(batch)
+    
+    # iterates and predicts over each batch
+    for batch in tqdm(batches, ncols=100):
+        data = numpy.zeros([batch_size,5,256,256], dtype=numpy.float32)
+        for i in range(len(batch)):
+            sample = numpy.zeros([5,256,256], dtype=numpy.float32)
+            d = input_dataset.read(window=r.windows.Window(batch[i][1], batch[i][0], 256, 256))
+            sample[:,:d.shape[1],:d.shape[2]] = d
+            data[i,:3] = dataset.scale_data('s1_during_flood', sample[:3,:,:])
+            data[i,3:] = dataset.scale_data('terrain', sample[3:,:,:])
+
+        data[numpy.isnan(data)] = 0
+        
+        # execute the MC iterations
+        pred = []
+        for iteration in range(n_iterations):
+            result = model(torch.from_numpy(data).to(DEVICE))
+            pred.append(result.detach().cpu().numpy())
+        pred = numpy.mean(numpy.asarray(pred),0)
+        for i in range(len(batch)):
+            result_class[94+batch[i][0]:256-94+batch[i][0], 94+batch[i][1]:256-94+batch[i][1]] = numpy.argmax(pred[i], 0)
+            result_eu[94+batch[i][0]:256-94+batch[i][0], 94+batch[i][1]:256-94+batch[i][1]] = -1*numpy.sum(numpy.log(pred[i])*pred[i], 0)
+    
+    result_eu[~numpy.isfinite(result_eu)] = -1
+
+    # save image
+    with r.Env():
+
+        # Write an array as a raster band to a new 8-bit file. For
+        # the new file's profile, we start with the profile of the source
+        profile = input_dataset.profile
+
+        # And then change the band count to 1, set the
+        # dtype to uint8, and specify LZW compression.
+        profile.update(
+            dtype=r.uint8,
+            nodata=255,
+            count=1,
+            compress='lzw')
+
+        with r.open(output_path+'-class.tif', 'w', **profile) as dst:
+            dst.write(result_class.astype(r.uint8), 1)
+        
+        profile.update(
+            dtype=r.float32,
+            nodata=-1,
+            count=1,
+            compress='lzw')
+
+        with r.open(output_path+'-uncertainty.tif', 'w', **profile) as dst:
+            dst.write(result_eu.astype(r.float32), 1)
+
 if __name__=='__main__':
     # train()
     predict_on_image('/media/bruno/Matosak/repos/bayesian-UNET-dropout/images/bangladesh_mosaic_clipped.tif', '/media/bruno/Matosak/repos/bayesian-UNET-dropout/images/bangladesh_mosaic_clipped-inference.tif')
