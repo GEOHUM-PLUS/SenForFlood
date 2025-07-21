@@ -11,7 +11,7 @@ warnings.filterwarnings("ignore")
 
 class SenForFlood(torch.utils.data.Dataset):
     def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, countries:list[str]=None,
-                 data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask', 'terrain', 'LULC'],
+                 data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask_v1.1', 'terrain', 'LULC', 'global_surface_water'],
                  use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
         '''
         Dataset reader for SenForFlood.
@@ -37,7 +37,7 @@ class SenForFlood(torch.utils.data.Dataset):
             List of data names to include when returning the samples. Should
             follow the name of the last folders inside the DFO or CEMS. Valid
             values are 's1_before_flood', 's1_during_flood', 's2_before_flood', 
-            's2_during_flood', 'flood_mask', 'terrain', and 'LULC'.
+            's2_during_flood', 'flood_mask_v1.1', 'terrain', 'LULC', and 'global_surface_water'.
         use_data_augmentation: bool (default False)
             Wheter or not to do data augmentation.
         scale_0_1: bool (default True)
@@ -62,18 +62,21 @@ class SenForFlood(torch.utils.data.Dataset):
             raise ValueError('Invalid value encountered for chip_size, value must be 32, 64, 128, 256 or 512.')
         if not source in ['CEMS', 'DFO']:
             raise ValueError('Invalid source. Valid values are "CDSE" or "DFO".')
+        for d in data_to_include:
+            if not d in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask_v1.1', 'terrain', 'LULC', 'global_surface_water']:
+                raise ValueError(f'Invalid value encountered for data_to_include. Valid values are "s1_before_flood", "s1_during_flood", "s2_before_flood", "s2_during_flood", "flood_mask_v1.1", "terrain", "LULC", and "global_surface_water".')
         
         self.percentile_top = percentile_scale_top
         self.percentile_bttm = percentile_scale_bttm
         if source == 'DFO':
             if countries is None:
-                self.samples_ids = glob.glob(os.path.join(dataset_folder, 'DFO/*/DFO_*_*/flood_mask/*_flood_mask.tif'))
+                self.samples_ids = glob.glob(os.path.join(dataset_folder, 'DFO/*/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
             else:
                 self.samples_ids = []
                 for country in countries:
-                    self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/DFO_*_*/flood_mask/*_flood_mask.tif')))
+                    self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif')))
         elif source == 'CEMS':
-            self.samples_ids = glob.glob(os.path.join(dataset_folder, f'CEMS/*/flood_mask/*_flood_mask.tif'))
+            self.samples_ids = glob.glob(os.path.join(dataset_folder, f'CEMS/*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
         else:
             raise ValueError(f'{source} not valid as source. DFO or CEMS.')
         self.samples_ids.sort()
@@ -103,11 +106,11 @@ class SenForFlood(torch.utils.data.Dataset):
         # iterates over data to include
         for dti in self.data_to_include:
             # tifffile reads data faster than rasterio when the whole file is needed (not windowed)
-            data = imread(sample_id[0].replace('flood_mask', dti), selection=(slice(int((sample_id[1]%(512/self.chip_size))*self.chip_size),int((sample_id[1]%(512/self.chip_size))*self.chip_size+self.chip_size)),
-                                                                              slice(int(int(sample_id[1]/(512/self.chip_size))*self.chip_size),int(int(sample_id[1]/(512/self.chip_size))*self.chip_size+self.chip_size))
-                                                                             )).astype(np.float32)
+            data = imread(sample_id[0].replace('flood_mask_v1.1', dti), selection=(slice(int((sample_id[1]%(512/self.chip_size))*self.chip_size),int((sample_id[1]%(512/self.chip_size))*self.chip_size+self.chip_size)),
+                                                                                   slice(int(int(sample_id[1]/(512/self.chip_size))*self.chip_size),int(int(sample_id[1]/(512/self.chip_size))*self.chip_size+self.chip_size))
+                                                                                   )).astype(np.float32)
             # add dimention to datasets with one band
-            if dti == 'flood_mask' or dti == 'LULC':
+            if dti == 'flood_mask_v1.1' or dti == 'LULC':
                 data = np.expand_dims(data, -1)
             # make shape pytorch-like
             data = np.moveaxis(data, -1, 0)
