@@ -7,10 +7,10 @@ import random
 import warnings
 import numpy as np
 import torchvision.transforms.functional
-warnings.filterwarnings("ignore")
+# warnings.filterwarnings("ignore")
 
 class SenForFlood(torch.utils.data.Dataset):
-    def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, countries:list[str]=None,
+    def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, events:list[str]=None, countries:list[str]=None,
                  data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask_v1.1', 'terrain', 'LULC', 'global_surface_water'],
                  use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
         '''
@@ -28,6 +28,10 @@ class SenForFlood(torch.utils.data.Dataset):
         chip_size: int (default 512)
             Chip size for tiling the samples. Valid values are 32, 64, 128, 256, 
             and 512.
+        events: list[str] (default None)
+            List of events to be included when returning samples. If different than None,
+            parameters 'source' and 'countries' will be ignored and 'events' will have
+            preference.
         countries: list[str] (default None)
             List of countries to be included when returning samples. Name of 
             countries should follow the name of folders inside "Data" folder.
@@ -68,21 +72,37 @@ class SenForFlood(torch.utils.data.Dataset):
         
         self.percentile_top = percentile_scale_top
         self.percentile_bttm = percentile_scale_bttm
-        if source == 'DFO':
-            if countries is None:
-                self.samples_ids = glob.glob(os.path.join(dataset_folder, 'DFO/*/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
+        if events is None:
+            if source == 'DFO':
+                if countries is None:
+                    self.samples_ids = glob.glob(os.path.join(dataset_folder, 'DFO/*/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
+                else:
+                    self.samples_ids = []
+                    for country in countries:
+                        self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif')))
+            elif source == 'CEMS':
+                self.samples_ids = glob.glob(os.path.join(dataset_folder, f'CEMS/*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
             else:
-                self.samples_ids = []
-                for country in countries:
-                    self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/DFO_*_*/flood_mask_v1.1/*_flood_mask_v1.1.tif')))
-        elif source == 'CEMS':
-            self.samples_ids = glob.glob(os.path.join(dataset_folder, f'CEMS/*/flood_mask_v1.1/*_flood_mask_v1.1.tif'))
+                raise ValueError(f'{source} not valid as source. DFO or CEMS.')
         else:
-            raise ValueError(f'{source} not valid as source. DFO or CEMS.')
+            self.samples_ids = []
+            for event in events:
+                if event.split('_')[0]=='DFO':
+                    country = event.split('_',2)[-1]
+                    if os.path.isdir(os.path.join(dataset_folder, f'DFO/{country}/{event}')):
+                        self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'DFO/{country}/{event}/flood_mask_v1.1/*_flood_mask_v1.1.tif')))
+                    else:
+                        print(f'Event "{event}" not found in "{os.path.join(dataset_folder, f"DFO/{country}/{event}")}".')
+                else:
+                    if os.path.isdir(os.path.join(dataset_folder, f'CEMS/{event}')):
+                        self.samples_ids.extend(glob.glob(os.path.join(dataset_folder, f'CEMS/{event}')))
+                    else:
+                        print(f'Event "{event}" not found in "{os.path.join(dataset_folder, f"CEMS/{event}")}".')
+
         self.samples_ids.sort()
         self.samples_ids = [[sample_id,i] for i in range(int(512/int(chip_size))**2) for sample_id in self.samples_ids]
         if len(self.samples_ids)==0:
-            raise UserWarning('No sample found with the countries given. Countries should have the same name and capitalization as the folders inside "Data".')
+            print('No samples found with the options given. Please check the dataset location, source, events or crountries given.')
         random.Random(shuffle_seed).shuffle(self.samples_ids)
         self.data_to_include = data_to_include
         self.use_data_augmentation = use_data_augmentation
@@ -154,3 +174,11 @@ class SenForFlood(torch.utils.data.Dataset):
         data = np.clip(data, a_min=0, a_max=1)
 
         return data
+
+if __name__=='__main__':
+    senforflood = SenForFlood('/media/bruno/Matosak/SenForFlood', events=['EMSR352', 'DFO_4621_Afghanistan'])
+
+    for ind, samples in enumerate(senforflood):
+        for s in samples:
+            print(s.shape)
+        break
