@@ -10,33 +10,37 @@ import torch.nn as nn
 import numpy
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
+import os
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 print('Device:', DEVICE)
 
-def train():
+def train(model_id):
     model = UNet(in_channels=5, out_channels=2, dropout_val=0.2).to(DEVICE)
     dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
-                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
+                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask_v1.1'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
-                        countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
+                        countries=['Sudan'], #['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
+                        # events = ['EMSR352', 'DFO_4463_Iran', 'DFO_4734_Iran', 'DFO_4816_Iran', 
+                        #           'DFO_4883_Iran', 'DFO_4909_Iran', 'DFO_5066_Iran'],
                         use_data_augmentation=True)
 
-    print(f'Total Samples: {len(dataset)}')
+    print(f'Total Chips: {len(dataset)}')
 
-    criterion = nn.CrossEntropyLoss()
+    cross_entropy = nn.CrossEntropyLoss()
     opt = torch.optim.Adam(model.parameters(), lr=0.001, betas=(0.5, 0.999))
 
     training_curves = {'Loss': {'train': [], 'eval': []},
                    'Accuracy': {'train': [], 'eval': []},
                    }
     
-    save_model_path = '/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia.pt'
+    model_folder = f'Models/{model_id}'
+    os.makedirs(model_folder, exist_ok=True)
 
     def model_train(input_train, output_train):
         model.train()
         output_ = model(input_train)
-        loss_train = criterion(output_.type(torch.float32), output_train)
+        loss_train = cross_entropy(output_.type(torch.float32), output_train)
         model.zero_grad()
         loss_train.backward()
         opt.step()
@@ -46,17 +50,33 @@ def train():
         training_curves['Loss']['train'].append(loss_train.item())
         training_curves['Accuracy']['train'].append(acc_train)
 
-    def model_val(input_eval, output_eval):
+    def model_val(input_eval, output_eval, plot_now=False):
         model.eval()
         with torch.no_grad():
             output_ = model(input_eval)
             acc_eval = (output_.argmax(1) == output_eval.argmax(1)).type(torch.float).sum().item()/(output_eval.shape[0]*output_eval.shape[2]*output_eval.shape[3])
-            loss_eval = criterion(output_.type(torch.float32), output_eval)
+            
+            if plot_now:
+                f, ax = plt.subplots(5,15, figsize=(15,5))
+                o1 = output_.argmax(1).detach().cpu()
+                o2 = output_eval.argmax(1).detach().cpu()
+                for i in range(5):
+                    for j in range(5):
+                        ax[i,j*3].imshow(o1[i*5+j])
+                        ax[i,j*3+1].imshow(o2[i*5+j])
+                        ax[i,j*3+2].imshow(input_eval[i*5+j,:3].detach().cpu().moveaxis(0,-1))
+                        ax[i,j*3].axis('off')
+                        ax[i,j*3+1].axis('off')
+                        ax[i,j*3+2].axis('off')
+                plt.tight_layout()
+                plt.savefig(f'{model_folder}/imgs/{step:05d}.png')
+                plt.close()
+
+            loss_eval = cross_entropy(output_.type(torch.float32), output_eval)
             training_curves['Loss']['eval'].append(loss_eval.item())
             training_curves['Accuracy']['eval'].append(acc_eval)
 
             return acc_eval
-
 
     max_epoch = 50
     train_size = 64
@@ -71,35 +91,37 @@ def train():
         for ind, (s1b, te, fm) in enumerate(dataloader):
             # train
             input_train = torch.cat([s1b[:train_size,:3,:,:], te[:train_size,:,:,:]], dim=1).type(torch.float32).to(DEVICE)
-            output_train = torch.nn.functional.one_hot((fm[:train_size,:,94:-94,94:-94]*2).to(torch.int64), 3).squeeze().moveaxis(-1,1)[:,:2].type(torch.float32).to(DEVICE)
+            output_train = torch.nn.functional.one_hot((fm[:train_size,:,94:-94,94:-94]).to(torch.int64), 2).squeeze().moveaxis(-1,1).type(torch.float32).to(DEVICE)
             
             model_train(input_train, output_train)
 
             # validate
             input_eval = torch.cat([s1b[train_size:,:3,:,:], te[train_size:,:,:,:]], dim=1).type(torch.float32).to(DEVICE)
-            output_eval = torch.nn.functional.one_hot((fm[train_size:,:,94:-94,94:-94]*2).to(torch.int64), 3).squeeze().moveaxis(-1,1)[:,:2].type(torch.float32).to(DEVICE)
+            output_eval = torch.nn.functional.one_hot((fm[train_size:,:,94:-94,94:-94]).to(torch.int64), 2).squeeze().moveaxis(-1,1).type(torch.float32).to(DEVICE)
 
-            val_acc = model_val(input_eval, output_eval)
+            val_acc = model_val(input_eval, output_eval, ind+1==len(dataloader))
             epoch_acc.append(val_acc)
+
+            print(f'Epoch: {epoch+1}, Step: {step}, val_acc: {training_curves["Accuracy"]["eval"][-1]:0.5f}, val_loss: {training_curves["Loss"]["eval"][-1]:0.5f}', end='\r' if ind<len(dataloader)-1 else '\n')
             
             step += 1
 
             if step%10==0:
                 plot_curves(training_curves, [i for i in range(step)], 
                             smoothed=True,
-                            save_path='/home/bruno/dataset_SenForFlood/models/curves_UNet_SouthAsia.png',
+                            save_path=f'{model_folder}/training_curves.png',
                             show=False,
                             title=f'Epochs: {epoch}')
             
         if numpy.mean(epoch_acc)>best_acc:
             model.eval()
             best_acc = numpy.mean(epoch_acc)
-            torch.save(model.state_dict(), save_model_path)
+            torch.save(model.state_dict(), f'{model_folder}/model_e{epoch:02d}.pt')
             print(f"Best model ever stored (acc. {best_acc:.4f}).")
 
 def predic_on_dataset():
     model_path = '/home/bruno/dataset_SenForFlood/models/UNet_SouthAsia.pt'
-    model = UNet(in_channels=5, out_channels=2, dropout_val=0.2)
+    model = UNet(in_channels=6, out_channels=2, dropout_val=0.2)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model = model.to(DEVICE)
 
@@ -109,7 +131,7 @@ def predic_on_dataset():
     train_size = 64
 
     dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
-                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
+                        data_to_include=['s1_during_flood', 'global_surface_water', 'flood_mask'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
                         use_data_augmentation=True)
@@ -141,15 +163,15 @@ def predict_on_image(image_path:str, output_path:str):
     import rasterio as r
 
     # load model
-    model_path = '/home/bruno/Documents/dataset_Sen2Flood/models/UNet_SouthAsia.pt'
+    model_path = '/media/bruno/Matosak/repos/SenForFlood/Examples/Models/test_Iran/model_e02.pt'
     model = UNet(in_channels=5, out_channels=2, dropout_val=0.2)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model = model.to(DEVICE)
     model.eval()
 
     # load SenForFlood for getting scalling function
-    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood/SenForFlood', chip_size=256,
-                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
+                        data_to_include=['s1_during_flood', 'terrain', 'flood_mask_v1.1'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri_Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
                         use_data_augmentation=True)
@@ -218,7 +240,7 @@ def predict_on_image_bayesian_dropout(input_path:str, output_path:str, n_iterati
             m.train()
 
     # load SenForFlood for getting scalling function
-    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood/SenForFlood', chip_size=256,
+    dataset = SenForFlood(dataset_folder='/media/bruno/Matosak/SenForFlood', chip_size=256,
                         data_to_include=['s1_during_flood', 'terrain', 'flood_mask'],
                         percentile_scale_bttm=5, percentile_scale_top=95,
                         countries=['Bangladesh', 'India', 'Pakistan', 'Sri_Lanka', 'Afghanistan', 'Nepal', 'Buthan'],
@@ -294,6 +316,8 @@ def predict_on_image_bayesian_dropout(input_path:str, output_path:str, n_iterati
             dst.write(result_eu.astype(r.float32), 1)
 
 if __name__=='__main__':
-    # train()
-    predict_on_image('/media/bruno/Matosak/repos/bayesian-UNET-dropout/images/bangladesh_mosaic_clipped.tif', '/media/bruno/Matosak/repos/bayesian-UNET-dropout/images/bangladesh_mosaic_clipped-inference.tif')
+    train(model_id='test_Sudan')
+    # predict_on_image(
+    #     '/media/bruno/Matosak/repos/bayesian-UNET-dropout/images/Bangladesh_2024-06_mosaic_2.tif', 
+    #     '/media/bruno/Matosak/repos/SenForFlood/Examples/Models/test_Iran/model_e02.tif')
     # pass
