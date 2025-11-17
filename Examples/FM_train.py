@@ -32,18 +32,33 @@ def smooth_series(series, window_size = 10):
 
     return series_smooth
 
-def plot_loss(losses, save_path, smooth_window=100):
-    plt.figure(figsize=(8,4))
-    plt.plot(losses, alpha=0.5, label='raw loss')
-    plt.plot(smooth_series(losses, smooth_window), label='smoothed loss')
-    plt.title('Loss', fontweight='bold')
-    plt.xlabel('Steps')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid()
+def plot_loss(losses, save_path=None, smooth_window=100):
+    f, ax = plt.subplots(1,2, figsize=(10,4), gridspec_kw={'width_ratios': [2, 1]})
+
+    f.suptitle('Loss', fontweight='bold')
+
+    ax[0].scatter(range(len(losses)), losses, facecolors=None, alpha=0.1, label='raw loss')
+    ax[0].plot(smooth_series(losses, smooth_window), label='smoothed loss', color='tab:orange')
+    ax[0].set_xlabel('Steps')
+    ax[0].set_ylabel('Loss')
+    ax[0].legend()
+    ax[0].grid()
+    
+    ax[1].scatter(range(len(losses)), losses, facecolors=None, alpha=0.1, label='raw loss')
+    ax[1].plot(smooth_series(losses, int(len(losses)/20)), label='smoothed loss', color='tab:orange')
+    ax[1].set_xlabel('Steps')
+    ax[1].set_ylabel('Loss')
+    ax[1].legend()
+    ax[1].grid()
+    ax[1].set_xlim([len(losses)/2, len(losses)])
+    ax[1].set_ylim([min(losses[int(len(losses)/2):]), max(losses[int(len(losses)/2):])])
+
     plt.tight_layout()
-    plt.savefig(save_path)
-    plt.close()
+    if save_path:
+        plt.savefig(save_path)
+        plt.close()
+    else:
+        plt.show()
 
 def trajectory(self, x, t_span):
     xts = [x]
@@ -63,6 +78,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--sigma', type=float, default=0.0, help="The sigma value. Must be greater than 0. Default to 0.01.")
     parser.add_argument('-b', '--base', type=int, default=64)
     parser.add_argument('-cs', '--chip-size', type=int, default=128)
+    parser.add_argument('-d', '--dropout', type=float, default=0.1)
+    parser.add_argument('-t', '--terrain', action='store_true')
     args = parser.parse_args()
 
     if args.batch_size<=0:
@@ -87,7 +104,7 @@ if __name__ == '__main__':
             f.write(f'{key}: {args_dict[key]}\n')
 
     # create the model
-    model = AttUNet_t(in_channels=2, out_channels=2, base=args.base).to(DEVICE)
+    model = AttUNet_t(in_channels=2, out_channels=2, base=args.base, dropout=args.dropout, use_terrain=args.terrain).to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate)
 
     # get dataloaders
@@ -95,9 +112,11 @@ if __name__ == '__main__':
         dataset_folder='/media/bruno/Matosak/SenForFlood',
         chip_size=args.chip_size,
         # events=['DFO_4459_Bangladesh'],
-        data_to_include=['s1_before_flood', 's1_during_flood'],
+        countries=['Bangladesh'],
+        data_to_include=['s1_before_flood', 's1_during_flood', 'terrain'] if args.terrain else ['s1_before_flood', 's1_during_flood'],
         use_data_augmentation=True
     )
+    print(f'{len(train_dataset):,d} training chips ({args.chip_size}x{args.chip_size})')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, drop_last=True, num_workers=4)
 
     #####################################
@@ -122,24 +141,28 @@ if __name__ == '__main__':
 
     # train loop
     for i in range(starting_epoch, args.epochs, 1):
-        for ind, (x1, x0) in enumerate(train_loader):
+        for ind, data in enumerate(train_loader):
             model.train()
             optimizer.zero_grad()
 
-            x0 = x0[:,:2].to(DEVICE)
-            x1 = x1[:,:2].to(DEVICE)
+            x0 = data[1][:,:2].to(DEVICE)
+            x1 = data[0][:,:2].to(DEVICE)
 
-            t = (torch.zeros([x0.shape[0], 1, x0.shape[2], x0.shape[3]])+torch.rand(x0.shape[0])[:,None,None,None]).to(DEVICE)
+            slope = None
+            if args.terrain:
+                slope = data[2][:,1][:,None,:,:].to(DEVICE)
+
+            t = torch.rand(x0.shape[0]).to(DEVICE)
 
             # xt = (t*x1)+(1-t)*x0
-            xt = torch.cos(torch.pi*t/2)*x0 + torch.sin(torch.pi*t/2)*x1
+            xt = torch.cos(torch.pi*t[:,None,None,None]/2)*x0 + torch.sin(torch.pi*t[:,None,None,None]/2)*x1
             # ut = x1 - x0
-            ut = (torch.pi/2) * (torch.cos(torch.pi*t/2)*x1 - torch.sin(torch.pi*t/2)*x0)
+            ut = (torch.pi/2) * (torch.cos(torch.pi*t[:,None,None,None]/2)*x1 - torch.sin(torch.pi*t[:,None,None,None]/2)*x0)
 
             if args.sigma>0:
                 ut = ut+(args.sigma*torch.randn_like(ut))
             
-            vt = model(xt, t)
+            vt = model(xt, t, slope)
             loss = ((vt-ut)**2).mean()
             
             loss.backward()
@@ -149,7 +172,7 @@ if __name__ == '__main__':
             times.append(time.time()-initial_time)
             initial_time = time.time()
 
-            print(f'epoch: {i+1}  steps: {ind+1}/{steps}  {f"loss_step: {losses[-1]:0.4f}" if ind!=(steps-1) else f"mean_loss: {np.mean(losses[-steps:]):.4f}"}  {np.mean(times[max(-10, -len(times)):]):.2f}s/i{f"  rt: {str(datetime.timedelta(seconds=int(np.mean(times[max(-10, -len(times))])*(steps-1-ind))))}" if ind!=(steps-1) else f"  total_time: {str(datetime.timedelta(seconds=int(np.sum(times[-steps:]))))}"}', end='\n' if ind==(steps-1) else '\r')
+            print(f'epoch: {i+1}  steps: {ind+1}/{steps}  {f"loss_step: {losses[-1]:0.4f}" if ind!=(steps-1) else f"mean_loss: {np.mean(losses[-steps:]):.4f}"}  {np.mean(times[max(-10, -len(times)):]):.2f}s/i{f"  rt: {str(datetime.timedelta(seconds=int(np.mean(times[max(-10, -len(times))])*(steps-1-ind))))}        " if ind!=(steps-1) else f"  total_time: {str(datetime.timedelta(seconds=int(np.sum(times[-steps:]))))}"}', end='\n' if ind==(steps-1) else '\r')
 
         # save intermediary model, if necessary
         if (i+1)%args.epochs_save_model==0 or (i+1)==args.epochs:
@@ -158,7 +181,8 @@ if __name__ == '__main__':
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss': losses,
-                'model_base': model.base
+                'model_base': model.base,
+                'use_terrain': model.use_terrain
             }, f'models_FM/{args.model_identifier}/Checkpoints/model-e{(i+1):04d}.pt')
     
         # plotting the losses

@@ -62,27 +62,36 @@ def plot_pairs(data_before, data_after, data_after_est, folder_save):
         plt.close()
 
 if __name__=='__main__':
-    model_id = 'test_attunet_cs256_b64_outnoconv'
-    model_name = 'model-e0100'
+    model_id = 'test_bangladesh'
+    model_name = 'model-e0020'
+
+    data_model = torch.load(f'models_FM/{model_id}/Checkpoints/{model_name}.pt', weights_only=True)
 
     os.makedirs(f'models_FM/{model_id}/plots', exist_ok=True)
     test_dataset = SenForFlood(
         dataset_folder='/media/bruno/Matosak/SenForFlood',
-        chip_size=256,
+        chip_size=512,
         events=['DFO_4459_Bangladesh'],
-        data_to_include=['s1_before_flood', 's1_during_flood'],
+        data_to_include=['s1_before_flood', 's1_during_flood', 'terrain'] if data_model['use_terrain'] else ['s1_before_flood', 's1_during_flood'],
         use_data_augmentation=True
     )
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, drop_last=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, drop_last=False)
 
-    for ind, (x1, x0) in enumerate(test_loader):
-        x1 = x1[:,:2]
-        x0 = x0[:,:2]
+    for ind, data in enumerate(test_loader):
+        x1 = data[0][:,:2]
+        x0 = data[1][:,:2]
+        slope = torch.Tensor([0])
+        if data_model['use_terrain']:
+            slope = data[2][:,1][:,None,:,:]
         break
     
     # create the model
-    data_model = torch.load(f'models_FM/{model_id}/Checkpoints/{model_name}.pt', weights_only=True)
-    model = AttUNet_t(in_channels=2, out_channels=2, base=data_model['model_base']).to(DEVICE)
+    model = AttUNet_t(
+        in_channels = 3 if data_model['use_terrain'] else 2, 
+        out_channels=2, 
+        base=data_model['model_base'], 
+        use_terrain = data_model['use_terrain']
+    ).to(DEVICE)
     model.load_state_dict(data_model['model_state_dict'])
 
     model.eval()
@@ -91,6 +100,6 @@ if __name__=='__main__':
         t_span = torch.linspace(0, 1, 100)
         for s,t in zip(t_span[:-1], t_span[1:]):
             xt = xts[-1]
-            t_expanded = (torch.zeros([xt.shape[0], 1, xt.shape[2], xt.shape[3]])+t)
-            xts.append((model(xt.to(DEVICE), t_expanded.to(DEVICE)).detach().cpu() * (t - s) + xt).detach().cpu())
+            t_expanded = torch.Tensor([t]).repeat(xt.shape[0])
+            xts.append((model(xt.to(DEVICE), t_expanded.to(DEVICE), slope.to(DEVICE)).detach().cpu() * (t - s) + xt).detach().cpu())
         plot_pairs(x0, x1, xts, f'models_FM/{model_id}/plots')
