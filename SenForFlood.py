@@ -12,7 +12,7 @@ import torchvision.transforms.functional
 class SenForFlood(torch.utils.data.Dataset):
     def __init__(self, dataset_folder:str, source:str='DFO', shuffle_seed:int=0, chip_size:int=512, events:list[str]=None, countries:list[str]=None,
                  data_to_include:list[str]=['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'flood_mask_v1.1', 'terrain', 'LULC', 'global_surface_water', 'SatCLIP_embedding'],
-                 use_data_augmentation:bool=False, scale_0_1:bool=True, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
+                 use_data_augmentation:bool=False, scale_0_1:bool=False, normalize:bool=False, percentile_scale_bttm:int=1, percentile_scale_top:int=99):
         '''
         Dataset reader for SenForFlood.
 
@@ -46,8 +46,10 @@ class SenForFlood(torch.utils.data.Dataset):
         use_data_augmentation: bool (default False)
             Wheter or not to do data augmentation.
         scale_0_1: bool (default True)
-            Wheter or not to scale samples between 0 and 1. If not, samples are
-            returned as their original raster values.
+            Wheter or not to scale samples between 0 and 1. Preference is given to
+            normalize_data in case both are True.
+        normalize: bool (default True)
+            Wheter or not to normalize the samples.
         percentile_scale_bttm: int (default 1)
             Percentile to use as bottom value when scaling samples. Valid values
             are 0, 1, 2, 5, 90, 95, 98, 99, and 100. Percentiles are pre-loaded
@@ -109,9 +111,10 @@ class SenForFlood(torch.utils.data.Dataset):
         self.use_data_augmentation = use_data_augmentation
         self.chip_size=int(chip_size)
         self.scale_0_1 = scale_0_1
+        self.normalize = normalize
 
         # loading limits
-        if self.scale_0_1:
+        if self.scale_0_1 or self.normalize:
             import pickle
             from pathlib import Path
             with open(Path(Path(__file__).parent / 'percentile_limits.pickle'), 'rb') as f:
@@ -140,7 +143,9 @@ class SenForFlood(torch.utils.data.Dataset):
                 data = np.moveaxis(data, -1, 0)
                     
                 # scales data between 0 and 1
-                if self.scale_0_1:
+                if self.normalize:
+                    data = self.normalize_data(dti, data)
+                elif self.scale_0_1:
                     data = self.scale_data(dti, data)
 
             # store to return later with others
@@ -169,7 +174,7 @@ class SenForFlood(torch.utils.data.Dataset):
     
     def scale_data(self, data_type, data):
         # follows scales only if needed
-        if data_type in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain']:
+        if data_type in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain', 'global_surfece_water']:
             for i in range(data.shape[0]):
                 data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_bttm))])/(self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_top))]-self.STRETCH_LIMITS[data_type][i][str(int(self.percentile_bttm))])
         else:
@@ -180,13 +185,57 @@ class SenForFlood(torch.utils.data.Dataset):
         data = np.clip(data, a_min=0, a_max=1)
 
         return data
+    
+    def normalize_data(self, data_type, data):
+        # follows scales only if needed
+        if data_type in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain', 'global_surfece_water']:
+            for i in range(data.shape[0]):
+                data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[data_type][i]['mean'])/self.STRETCH_LIMITS[data_type][i]['std']
+        else:
+            for i in range(data.shape[0]):
+                data[i,:,:] = (data[i,:,:]-self.STRETCH_LIMITS[data_type][i]['0'])/(self.STRETCH_LIMITS[data_type][i]['100']-self.STRETCH_LIMITS[data_type][i]['0'])
+
+        return data
 
 if __name__=='__main__':
-    senforflood = SenForFlood('/media/bruno/Matosak/SenForFlood', events=['EMSR352'], chip_size=256)
+    # creates pickle file with the parameters for normalization
+    from tqdm.auto import tqdm
+    import pickle
 
-    print('Total Samples:', len(senforflood))
+    for dti in ['s1_before_flood', 's1_during_flood', 's2_before_flood', 's2_during_flood', 'terrain', 'LULC', 'global_surface_water']:
+        print(dti)
 
-    for ind, samples in enumerate(senforflood):
-        for s in samples:
-            print(s.shape)
-        break
+        senforflood = SenForFlood(
+            '/media/bruno/Matosak/SenForFlood',
+            # countries=['Brazil'],
+            data_to_include=[dti],
+            chip_size=512,
+            scale_0_1=False
+        )
+        bs = 256
+        dataloader = torch.utils.data.DataLoader(senforflood, batch_size=bs, drop_last=False, num_workers=4)
+
+        _ = senforflood[0]
+
+        with open('/media/bruno/Matosak/repos/SenForFlood/percentile_limits_copy.pickle', 'rb') as f:
+            statistics = pickle.load(f)
+
+        for b in range(_[0].shape[0]):
+            data = np.zeros([len(senforflood), 512, 512], dtype=np.float32)
+            for ind, [samples] in tqdm(enumerate(dataloader), total=len(dataloader), ncols=100):
+                data[ind*bs:ind*bs+samples.shape[0]] = samples[:,b].numpy()
+
+            if dti not in ['terrain', 'LULC', 'global_surface_water']:
+                data[data==0] = None
+
+            q = [0,1,2,5,10,25,50,75,90,95,98,99,100]
+            data = data[np.isfinite(data)]
+            percentiles = np.percentile(data, q=q)
+            for i in range(len(q)):
+                statistics[dti][b][str(q[i])] = percentiles[i]
+            
+            statistics[dti][b]['mean'] = np.mean(data)
+            statistics[dti][b]['std'] = np.std(data)
+    
+        with open('/media/bruno/Matosak/repos/SenForFlood/percentile_limits_copy.pickle', 'wb') as handle:
+            pickle.dump(statistics, handle, protocol=pickle.HIGHEST_PROTOCOL)

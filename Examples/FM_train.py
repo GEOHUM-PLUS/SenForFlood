@@ -112,9 +112,10 @@ if __name__ == '__main__':
         dataset_folder='/media/bruno/Matosak/SenForFlood',
         chip_size=args.chip_size,
         # events=['DFO_4459_Bangladesh'],
-        countries=['Bangladesh'],
+        # countries=['Bangladesh'],
         data_to_include=['s1_before_flood', 's1_during_flood', 'terrain'] if args.terrain else ['s1_before_flood', 's1_during_flood'],
-        use_data_augmentation=True
+        use_data_augmentation=True,
+        normalize=True
     )
     print(f'{len(train_dataset):,d} training chips ({args.chip_size}x{args.chip_size})')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, drop_last=True, num_workers=4)
@@ -172,7 +173,7 @@ if __name__ == '__main__':
             times.append(time.time()-initial_time)
             initial_time = time.time()
 
-            print(f'epoch: {i+1}  steps: {ind+1}/{steps}  {f"loss_step: {losses[-1]:0.4f}" if ind!=(steps-1) else f"mean_loss: {np.mean(losses[-steps:]):.4f}"}  {np.mean(times[max(-10, -len(times)):]):.2f}s/i{f"  rt: {str(datetime.timedelta(seconds=int(np.mean(times[max(-10, -len(times))])*(steps-1-ind))))}        " if ind!=(steps-1) else f"  total_time: {str(datetime.timedelta(seconds=int(np.sum(times[-steps:]))))}"}', end='\n' if ind==(steps-1) else '\r')
+            print(f'epoch: {i+1}  steps: {ind+1}/{steps}  {f"loss_step: {losses[-1]:0.4f}" if ind!=(steps-1) else f"mean_loss: {np.mean(losses[-steps:]):.4f}"}  {np.mean(times[max(-10, -len(times)):]):.2f}s/i{f"  rt: {str(datetime.timedelta(seconds=int(np.mean(times[max(-10, -len(times))])*(steps-1-ind))))}        " if ind!=(steps-1) else f"  total_time: {str(datetime.timedelta(seconds=int(np.sum(times[-steps:]))))}         "}', end='\n' if ind==(steps-1) else '\r')
 
         # save intermediary model, if necessary
         if (i+1)%args.epochs_save_model==0 or (i+1)==args.epochs:

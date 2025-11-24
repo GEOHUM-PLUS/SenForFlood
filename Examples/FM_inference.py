@@ -12,13 +12,35 @@ from models import UNet_t, AttUNet_t
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
 
-def prepare_data_for_plot(data):
-    data_div = data[0]/data[1]
-    p = np.nanpercentile(data_div, q=[5,95])
-    data_div = (data_div-p[0])/(p[1]-p[0])
-    data_div = np.clip(data_div, 0, 1)
-    data_ = np.clip(data, 0, 1)
-    return np.moveaxis(np.concatenate([data_, data_div[None,:,:]], axis=0), 0, -1)
+def prepare_data_for_plot(x0, x1, x1_):
+    data1 = x0.copy()
+    data2 = x1.copy()
+    data3 = x1_.copy()
+    
+    div1 = np.positive(data1[0])/np.positive(data1[1])
+    div2 = np.positive(data2[0])/np.positive(data2[1])
+    div3 = np.positive(data3[0])/np.positive(data3[1])
+
+    data1 = np.moveaxis(np.concatenate([data1, div1[None,:,:]], axis=0), 0, -1)
+    data2 = np.moveaxis(np.concatenate([data2, div2[None,:,:]], axis=0), 0, -1)
+    data3 = np.moveaxis(np.concatenate([data3, div3[None,:,:]], axis=0), 0, -1)
+
+    for i in range(3):
+        merged = np.concatenate([data1[:,:,i], data2[:,:,i], data3[:,:,i]], axis=0)
+        p = np.percentile(merged[np.isfinite(merged)], q=[2,98])
+        data1[:,:,i] = (data1[:,:,i]-p[0])/(p[1]-p[0])
+        data2[:,:,i] = (data2[:,:,i]-p[0])/(p[1]-p[0])
+        data3[:,:,i] = (data3[:,:,i]-p[0])/(p[1]-p[0])
+    
+    data1[~np.isfinite(data1)] = 0
+    data2[~np.isfinite(data2)] = 0
+    data3[~np.isfinite(data3)] = 0
+
+    data1 = np.clip(data1, 0, 1)
+    data2 = np.clip(data2, 0, 1)
+    data3 = np.clip(data3, 0, 1)
+
+    return data1, data2, data3
 
 def plot_pairs(data_before, data_after, data_after_est, folder_save):
 
@@ -26,15 +48,17 @@ def plot_pairs(data_before, data_after, data_after_est, folder_save):
     
         f, ax = plt.subplots(2, 3, figsize=(3*3,3*2))
 
-        ax[0,0].imshow(prepare_data_for_plot(data_before[i].numpy()))
+        db, da, da_ = prepare_data_for_plot(data_before[i].numpy(), data_after[i].numpy(), data_after_est[-1][i].numpy())
+
+        ax[0,0].imshow(db)
         ax[0,0].axis('off')
         ax[0,0].title.set_text('$X_0$')
 
-        ax[0,1].imshow(prepare_data_for_plot(data_after[i].numpy()))
+        ax[0,1].imshow(da)
         ax[0,1].title.set_text('$X_1$')
         ax[0,1].axis('off')
 
-        ax[0,2].imshow(prepare_data_for_plot(data_after_est[-1][i]))
+        ax[0,2].imshow(da_)
         ax[0,2].title.set_text('$X_1\'$')
         ax[0,2].axis('off')
 
@@ -62,8 +86,8 @@ def plot_pairs(data_before, data_after, data_after_est, folder_save):
         plt.close()
 
 if __name__=='__main__':
-    model_id = 'test_bangladesh'
-    model_name = 'model-e0020'
+    model_id = 'test_times'
+    model_name = 'model-e0100'
 
     data_model = torch.load(f'models_FM/{model_id}/Checkpoints/{model_name}.pt', weights_only=True)
 
@@ -73,9 +97,11 @@ if __name__=='__main__':
         chip_size=512,
         events=['DFO_4459_Bangladesh'],
         data_to_include=['s1_before_flood', 's1_during_flood', 'terrain'] if data_model['use_terrain'] else ['s1_before_flood', 's1_during_flood'],
-        use_data_augmentation=True
+        use_data_augmentation=False,
+        normalize=True,
+        # scale_0_1=True
     )
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, drop_last=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, drop_last=False)
 
     for ind, data in enumerate(test_loader):
         x1 = data[0][:,:2]
@@ -87,7 +113,7 @@ if __name__=='__main__':
     
     # create the model
     model = AttUNet_t(
-        in_channels = 3 if data_model['use_terrain'] else 2, 
+        in_channels=2,
         out_channels=2, 
         base=data_model['model_base'], 
         use_terrain = data_model['use_terrain']

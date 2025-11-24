@@ -36,7 +36,11 @@ class AttentionGate(nn.Module):
 class ConvBlock(nn.Module):
     def __init__(self, in_channels:int, out_channels:int, dropout:float=0.2):
         super().__init__()
-        self.t_emb = nn.Conv2d(1, out_channels, kernel_size=1)
+        self.t_emb = nn.Sequential(
+            nn.Conv2d(1, out_channels, kernel_size=1),
+            nn.BatchNorm2d(out_channels),
+            nn.SELU(inplace=True)
+        )
 
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, padding_mode='reflect')
         self.bn1 = nn.BatchNorm2d(out_channels)
