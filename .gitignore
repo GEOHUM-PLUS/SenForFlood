@@ -174,3 +174,5 @@ cython_debug/
 .pypirc
 Models
 models_FM
+tests.ipynb
+Images
