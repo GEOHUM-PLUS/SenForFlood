@@ -34,10 +34,10 @@ def return_region_in_wgs84_and_date(path_ref_file:str):
     # getting centroid of the sample
     df = geopandas.GeoDataFrame(
         geometry=[box(
-            (dataset.bounds.left+dataset.bounds.right)/2-200000, 
-            (dataset.bounds.bottom+dataset.bounds.top)/2-200000, 
-            (dataset.bounds.left+dataset.bounds.right)/2+200000, 
-            (dataset.bounds.bottom+dataset.bounds.top)/2+200000
+            dataset.bounds.left, 
+            dataset.bounds.bottom, 
+            dataset.bounds.right, 
+            dataset.bounds.top
         )],
         crs='EPSG:3857' # dataset.crs
     )
@@ -64,13 +64,13 @@ if __name__=='__main__':
     files.sort()
 
     # open FeatureCollection from GEE
-    daily_precipitation = ee.ImageCollection('UCSB-CHC/CHIRPS/V3/DAILY_SAT')
+    MERIT_hydro = ee.Image('MERIT/Hydro/v1_0_1').select(['upa', 'hnd'])
 
     # iterate over samples to get time series data
     for sample_path in tqdm(files):
         # create folder
-        folder_path = sample_path.rsplit('\\', 2)[0]+'\\precipitation_30d_local'
-        data_path = folder_path+'\\'+sample_path.rsplit('\\',1)[-1].replace('s1_during_flood.tif', 'precipitation_30d_local.tif')
+        folder_path = sample_path.rsplit('\\', 2)[0]+'\\MERIT_hydro'
+        data_path = folder_path+'\\'+sample_path.rsplit('\\',1)[-1].replace('s1_during_flood.tif', 'MERIT_hydro.tif')
         
         if os.path.isfile(data_path):
             try:
@@ -89,17 +89,9 @@ if __name__=='__main__':
                 region, image_date = return_region_in_wgs84_and_date(sample_path)
                 region = ee.Geometry.Polygon(list(region.exterior.coords))
 
-                daily_precipitation_filtered = daily_precipitation.filterDate(
-                    (image_date-datetime.timedelta(days=32)).strftime('%Y-%m-%d'),
-                    image_date.strftime('%Y-%m-%d')
-                )
-
-                time_series = daily_precipitation_filtered.map(clip_in_collection)
-                time_series = time_series.toBands()
-
-                url = time_series.getDownloadURL(
+                url = MERIT_hydro.getDownloadURL(
                     {'region': region,
-                    'dimensions': '64x64',
+                    'dimensions': '512x512',
                     'crs': 'EPSG:3857',
                     'format': 'GEO_TIFF'
                     }
@@ -111,6 +103,7 @@ if __name__=='__main__':
                 with open(data_path, 'wb') as f:
                     f.write(response.content)
                 download_pending = False
-            except:
+            except Exception as e:
+                print(e)
                 print('\nDownload failed, retrying in 60 seconds...')
                 time.sleep(60)

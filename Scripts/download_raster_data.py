@@ -235,52 +235,40 @@ def download_chip(folder_output, aoi_geometry,
               'LULC': lulc,
               'global_surface_water': gsw}
 
+    
     for image_id in image_id_to_download:
-        filename = f'{folder_output}/{image_id}/{ind:06d}_{image_id}.tif'
-        if os.path.exists(filename):
+        download_pending = True
+        while download_pending:
+            filename = f'{folder_output}/{image_id}/{ind:06d}_{image_id}.tif'
+            if os.path.exists(filename):
+                try:
+                    # dataset = r.open(filename)
+                    data = tifffile.imread(filename)
+                    data = r.open(filename).read()
+                    continue
+                except KeyboardInterrupt:
+                    print('Manually interrupted!')
+                    exit()
+                except:
+                    os.remove(filename)
+                    print(filename)
+            url = images[image_id].getDownloadURL(
+                {'region': region,
+                'dimensions': '512x512',
+                'crs': epsg,
+                'format': 'GEO_TIFF'
+                }
+            )
             try:
-                # dataset = r.open(filename)
-                data = tifffile.imread(filename)
-                data = r.open(filename).read()
-                continue
-            except KeyboardInterrupt:
-                print('Manually interrupted!')
-                exit()
-            except:
-                os.remove(filename)
-                print(filename)
-        url = images[image_id].getDownloadURL(
-            {'region': region,
-            'dimensions': '512x512',
-            'crs': epsg,
-            'format': 'GEO_TIFF'
-            }
-        )
-        data_ = None
-        count = 0
-        while data_ is None:
-            try:
-                with open(filename, 'wb') as f:
-                    response = requests.get(url, stream=True)
-                    if not response.ok:
-                        print(response)
-                    for block in response.iter_content(1024):
-                        if not block:
-                            break
-                        f.write(block)
-                        
-                dict_time[image_id]=toc()
+                response = requests.get(url)
+                response.raise_for_status()
 
-                # opens the dile to check if it is ok
-                # remove no data tags because they're causing trouble later
-                with r.open(filename, 'r+') as data_:
-                    data_.nodata = None
+                with open(data_path, 'wb') as f:
+                    f.write(response.content)
+                download_pending = False
             except:
-                os.remove(filename)
-                count += 1
-                if count>=10:
-                    raise IOError(f'Some error is happening during download, chip id {ind} {image_id} was tried 10 times already.')
-                time.sleep(5)
+                print('\nDownload failed, retrying in 60 seconds...')
+                time.sleep(60)
         
         # change bits for SAR data
         if image_id in ['s1_before_flood', 's1_during_flood', 'terrain']:
